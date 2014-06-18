@@ -14,6 +14,8 @@
 #import <thrift/TBinaryProtocol.h>
 #import <thrift/TTransportException.h>
 
+#import <GBToolbox/GBToolbox.h>
+
 @implementation GBPushApi
 
 #pragma mark - Overrides
@@ -55,7 +57,7 @@
 #pragma mark - Util
 
 +(GBPushPushToken *)_iOSPushTokenForToken:(NSData *)token {
-    return [[GBPushPushToken alloc] initWithType:PushTokenType_APNS token:[[NSString alloc] initWithData:token encoding:NSUTF8StringEncoding]];
+    return [[GBPushPushToken alloc] initWithType:PushTokenType_APNS token:PushDeviceToken2String(token)];
 }
 
 @end

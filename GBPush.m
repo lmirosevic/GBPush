@@ -114,9 +114,9 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
     [[self sharedPush] _processCommandQueue];
 }
 
-+(void)systemFailedToEnablePush {
++(void)systemFailedToEnablePushWithError:(NSError *)error {
     // clear the token
-    [GBStorage(kNamespace) delete:kPushManagerToken];
+    [GBStorage(kNamespace) removePermanently:kPushManagerToken];
     
     // process the command queue
     [[self sharedPush] _processCommandQueue];

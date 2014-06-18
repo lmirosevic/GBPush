@@ -19,7 +19,7 @@
     [GBPush systemDidEnablePushWithToken:deviceToken]; \
 } \
 -(void)application:(UIApplication *)application didFailToRegisterForRemoteNotificationsWithError:(NSError *)error { \
-    [GBPush systemFailedToEnablePush]; \
+    [GBPush systemFailedToEnablePushWithError:error]; \
 }
 
 typedef void(^GBPushCallCompletionBlock)(BOOL success);
@@ -39,7 +39,7 @@ typedef void(^GBPushPushHandlerBlock)(NSDictionary *pushNotification, BOOL appAc
 #pragma mark - AppDelegate hooks
 
 +(void)systemDidEnablePushWithToken:(NSData *)pushToken;
-+(void)systemFailedToEnablePush;
++(void)systemFailedToEnablePushWithError:(NSError *)error;
 +(void)handlePush:(NSDictionary *)push appActive:(BOOL)appActive;
 
 #pragma mark - Plumbing
