@@ -8,14 +8,43 @@
 
 #import <Foundation/Foundation.h>
 
-#import <GBThriftApi/GBThriftApi.h>
+#import "GBPushApi.h"
 
-#import "GoonbeePushService.h"
+#define GBPushAppDelegateHooks \
+-(void)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)userInfo { \
+    BOOL appInactive = application.applicationState == UIApplicationStateInactive || application.applicationState == UIApplicationStateBackground; \
+    [GBPush handlePush:userInfo appActive:!appInactive]; \
+} \
+-(void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken { \
+    [GBPush systemDidEnablePushWithToken:deviceToken]; \
+} \
+-(void)application:(UIApplication *)application didFailToRegisterForRemoteNotificationsWithError:(NSError *)error { \
+    [GBPush systemFailedToEnablePush]; \
+}
 
-@interface GBPush : GBThriftApi
+typedef void(^GBPushCallCompletionBlock)(BOOL success);
+typedef void(^GBPushPushHandlerBlock)(NSDictionary *pushNotification, BOOL appActive);
 
--(void)setChannelSubscriptionStatusWithPushToken:(GBPushPushToken *)pushToken channel:(NSString *)channel subscriptionStatus:(BOOL)subscriptionStatus completed:(GBThriftCallCompletionBlock)block;
--(void)subscribedChannelsForPushToken:(GBPushPushToken *)pushToken range:(GBSharedRange *)range completed:(GBThriftCallCompletionBlock)block;
--(void)subscriptionStatusForPushToken:(GBPushPushToken *)pushToken channel:(NSString *)channel completed:(GBThriftCallCompletionBlock)block;
+@interface GBPush : NSObject
+
+#pragma mark - Main API
+
++(void)connectToServer:(NSString *)server port:(NSUInteger)port;
+
++(void)setChannelSubscriptionStatusForChannel:(NSString *)channel subscriptionStatus:(BOOL)subscriptionStatus completed:(GBPushCallCompletionBlock)block;
++(void)subscriptionStatusForChannel:(NSString *)channel completed:(GBPushCallCompletionBlock)block;
++(void)subscribedChannelsWithRange:(GBSharedRange *)range completed:(GBPushCallCompletionBlock)block;
++(void)setPushHanderBlock:(GBPushPushHandlerBlock)block;
+
+#pragma mark - AppDelegate hooks
+
++(void)systemDidEnablePushWithToken:(NSData *)pushToken;
++(void)systemFailedToEnablePush;
++(void)handlePush:(NSDictionary *)push appActive:(BOOL)appActive;
+
+#pragma mark - Plumbing
+
++(NSData *)pushToken;
++(BOOL)isPushEnabledBySystem;
 
 @end
