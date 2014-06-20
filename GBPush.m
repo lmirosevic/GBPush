@@ -21,12 +21,13 @@ static NSString * const kPushManagerToken =                             @"PushTo
 
 typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
 
-#define kGBPushManagerThriftTranslatedBlock(block) ^(int status, id result, BOOL cancelled) { \
+#define kGBPushManagerThriftAugmentedBlock(block, shouldTriggerHandler) ^(int status, id result, BOOL cancelled) { \
     if (status == ResponseStatus_SUCCESS) { \
-        if (block) block(YES); \
+        if (block) block(result, YES); \
+        if (shouldTriggerHandler) [self _callAllSubscriptionsPotentiallyChangedHandlerBlocks]; \
     } \
     else { \
-        if (block) block(NO); \
+        if (block) block(nil, NO); \
     } \
 }
 
@@ -35,13 +36,15 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
 @property (strong, nonatomic) NSMutableArray                            *commandQueue;
 @property (copy, nonatomic) GBPushPushHandlerBlock                      pushHandlerBlock;
 
+@property (strong, nonatomic) NSMapTable                                *handlersForContext;
+
 @end
 
 @implementation GBPush
 
 #pragma mark - Life
 
-+(instancetype)sharedPush {
++(GBPush *)sharedPush {
     static GBPush *_sharedPush;
     @synchronized(self) {
         if (!_sharedPush) {
@@ -55,6 +58,7 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
 -(id)init {
     if (self = [super init]) {
         self.commandQueue = [NSMutableArray new];
+        self.handlersForContext = [NSMapTable new];
     }
     
     return self;
@@ -67,40 +71,71 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
 }
 
 +(void)setChannelSubscriptionStatusForChannel:(NSString *)channel subscriptionStatus:(BOOL)subscriptionStatus completed:(GBPushCallCompletionBlock)block {
-    [[self sharedPush] _callCommandWhenPushAvailable:^(NSData *token) {
-        if (token) {
-            [[GBPushApi sharedApi] setChannelSubscriptionStatusWithPushToken:token channel:channel subscriptionStatus:subscriptionStatus completed:kGBPushManagerThriftTranslatedBlock(block)];
-        }
-        else {
-            if (block) block(NO);
-        }
-    }];
+    [self setChannelSubscriptionStatusForChannel:channel subscriptionStatus:subscriptionStatus completed:block triggerHandler:YES];
 }
 
 +(void)subscriptionStatusForChannel:(NSString *)channel completed:(GBPushCallCompletionBlock)block {
+    [self subscriptionStatusForChannel:channel completed:block triggerHandler:YES];
+}
+
++(void)subscribedChannelsWithRange:(GBSharedRange *)range completed:(GBPushCallCompletionBlock)block {
+    [self subscribedChannelsWithRange:range completed:block triggerHandler:YES];
+}
+
++(void)setChannelSubscriptionStatusForChannel:(NSString *)channel subscriptionStatus:(BOOL)subscriptionStatus completed:(GBPushCallCompletionBlock)block triggerHandler:(BOOL)shouldTriggerHandler {
     [[self sharedPush] _callCommandWhenPushAvailable:^(NSData *token) {
         if (token) {
-            [[GBPushApi sharedApi] subscriptionStatusForPushToken:token channel:channel completed:kGBPushManagerThriftTranslatedBlock(block)];
+            [[GBPushApi sharedApi] setChannelSubscriptionStatusWithPushToken:token channel:channel subscriptionStatus:subscriptionStatus completed:kGBPushManagerThriftAugmentedBlock(block, shouldTriggerHandler)];
         }
         else {
-            if (block) block(NO);
+            if (block) block(nil, NO);
         }
     }];
 }
 
-+(void)subscribedChannelsWithRange:(GBSharedRange *)range completed:(GBPushCallCompletionBlock)block {
++(void)subscriptionStatusForChannel:(NSString *)channel completed:(GBPushCallCompletionBlock)block triggerHandler:(BOOL)shouldTriggerHandler {
     [[self sharedPush] _callCommandWhenPushAvailable:^(NSData *token) {
         if (token) {
-            [[GBPushApi sharedApi] subscribedChannelsForPushToken:token range:range completed:kGBPushManagerThriftTranslatedBlock(block)];
+            [[GBPushApi sharedApi] subscriptionStatusForPushToken:token channel:channel completed:kGBPushManagerThriftAugmentedBlock(block, shouldTriggerHandler)];
         }
         else {
-            if (block) block(NO);
+            if (block) block(nil, NO);
+        }
+    }];
+}
+
++(void)subscribedChannelsWithRange:(GBSharedRange *)range completed:(GBPushCallCompletionBlock)block triggerHandler:(BOOL)shouldTriggerHandler {
+    [[self sharedPush] _callCommandWhenPushAvailable:^(NSData *token) {
+        if (token) {
+            [[GBPushApi sharedApi] subscribedChannelsForPushToken:token range:range completed:kGBPushManagerThriftAugmentedBlock(block, shouldTriggerHandler)];
+        }
+        else {
+            if (block) block(nil, NO);
         }
     }];
 }
 
 +(void)setPushHanderBlock:(GBPushPushHandlerBlock)block {
     [[self sharedPush] setPushHandlerBlock:block];
+}
+
++(void)addPushSubscriptionsPotentiallyChangedHandler:(GBPushSubscriptionsPotentiallyChangedHandlerBlock)block forContext:(id)context {
+    if (!context) @throw [NSException exceptionWithName:NSInvalidArgumentException reason:@"Must pass in a non-nil context" userInfo:nil];
+    
+    // lazy creation of bucket
+    if (![self sharedPush].handlersForContext[context]) {
+        [self sharedPush].handlersForContext[context] = [NSMutableSet new];
+    }
+    
+    // add the handler
+    [[self sharedPush].handlersForContext[context] addObject:[block copy]];
+
+}
+
++(void)removeAllPushSubscriptionsChangedHandlersForContext:(id)context {
+    if (!context) @throw [NSException exceptionWithName:NSInvalidArgumentException reason:@"Must pass in a non-nil context" userInfo:nil];
+    
+    [[self sharedPush].handlersForContext removeObjectForKey:context];
 }
 
 #pragma mark - AppDelegate hooks
@@ -139,6 +174,14 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
 }
 
 #pragma mark - Util
+
++(void)_callAllSubscriptionsPotentiallyChangedHandlerBlocks {
+    for (id context in [self sharedPush].handlersForContext) {
+        for (GBPushSubscriptionsPotentiallyChangedHandlerBlock updateHandler in [self sharedPush].handlersForContext[context]) {
+            updateHandler();
+        }
+    }
+}
 
 +(void)_requestPushPermissionsIfNeeded {
     // if we don't have a push token yet, try to get one
