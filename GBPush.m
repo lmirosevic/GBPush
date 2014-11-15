@@ -126,6 +126,14 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
 }
 
 + (void)requestPermissionForShowingUserNotificationTypes:(GBPushUserNotificationType)types completed:(GBPushUserNotificationPermissionRequestCompletedBlock)block {
+    // if the user wants the silent notifications
+    if (types == GBPushUserNotificationTypeSilent) {
+        // then we should warn him if he has not included the remote-notification key in the UIBackgroundModes array
+        if (![InfoPlist[@"UIBackgroundModes"] containsObject:@"remote-notification"]) {
+            NSLog(@"You've asked for permissions for silent notifications, but you still need to add \"remote-notification\" to the list of your supported UIBackgroundModes in your Info.plist.");
+        }
+    }
+    
     // this method has no effect on iOS versions 7 and below. It's only relevant for iOS 8+ where we need to request permissions to notifiy the user.
     if ([[UIApplication sharedApplication] respondsToSelector:@selector(registerUserNotificationSettings:)]) {
         // make sure we're not already checking for this

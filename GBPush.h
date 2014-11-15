@@ -16,16 +16,25 @@
  Add this on the top level of you AppDelegate implementation to implement the required GBPush hooks into the delegate calls.
  */
 #define GBPushAppDelegateHooks \
+/* Push handling (Support for iOS 6 and below) */ \
 - (void)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)userInfo { \
     BOOL appInactive = application.applicationState == UIApplicationStateInactive || application.applicationState == UIApplicationStateBackground; \
     [GBPush handlePush:userInfo appActive:!appInactive]; \
 } \
+/* Push handling (iOS 7+ support) */ \
+- (void)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)userInfo fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler { \
+    BOOL appInactive = application.applicationState == UIApplicationStateInactive || application.applicationState == UIApplicationStateBackground; \
+    [GBPush handlePush:userInfo appActive:!appInactive]; \
+} \
+/* Token registration (success) */ \
 - (void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken { \
     [GBPush systemDidEnablePushWithToken:deviceToken]; \
 } \
+/* Token registration (failed) */ \
 - (void)application:(UIApplication *)application didFailToRegisterForRemoteNotificationsWithError:(NSError *)error { \
     [GBPush systemFailedToEnablePushWithError:error]; \
 } \
+/* User notification permission request */ \
 - (void)application:(UIApplication *)application didRegisterUserNotificationSettings:(UIUserNotificationSettings *)notificationSettings { \
     [GBPush systemDidFinishRequestingUserNotificationPermissions]; \
 }
