@@ -133,7 +133,7 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
             [self sharedPush].isRequestForPermissionsForShowingUserNotificationsInProgress = YES;
             
             // check if the currently permitted user notification types differ from what we want
-            if ([self _areAllRequestedPermissionsAlreadyPermitted:types]) {
+            if (![self _areAllRequestedPermissionsAlreadyPermitted:types]) {
                 // store out callback
                 [self sharedPush].userNotificationsPermissionRequestBlock = block;
                 
@@ -143,7 +143,7 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
             // if they don't differ
             else {
                 // call the block immediately
-                if (block) block(YES);
+                if (block) block([self currentPermittedUserNotificationTypes], NO);
             }
         }
         else {
@@ -152,6 +152,7 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
     }
     // iOS 7 or below
     else {
+        if (block) block([self currentPermittedUserNotificationTypes], NO);
         // noop. Permissions are gathered automatically when registering for remote notifications
     }
 }
@@ -248,7 +249,7 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
     GBPush *sharedPush = [self sharedPush];
     
     // call our block if we had one
-    if (sharedPush.userNotificationsPermissionRequestBlock) sharedPush.userNotificationsPermissionRequestBlock([self currentPermittedUserNotificationTypes]);
+    if (sharedPush.userNotificationsPermissionRequestBlock) sharedPush.userNotificationsPermissionRequestBlock([self currentPermittedUserNotificationTypes], YES);
     
     // release the block
     sharedPush.userNotificationsPermissionRequestBlock = nil;

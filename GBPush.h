@@ -49,7 +49,7 @@ typedef NS_OPTIONS(NSUInteger, GBPushUserNotificationType) {
 typedef void(^GBPushCallCompletionBlock)(id result, BOOL success);
 typedef void(^GBPushSubscriptionsPotentiallyChangedHandlerBlock)();
 typedef void(^GBPushPushHandlerBlock)(NSDictionary *pushNotification, BOOL appActive);
-typedef void(^GBPushUserNotificationPermissionRequestCompletedBlock)(GBPushUserNotificationType permittedTypes);
+typedef void(^GBPushUserNotificationPermissionRequestCompletedBlock)(GBPushUserNotificationType permittedTypes, BOOL didRequestPermissions);
 
 @interface GBPush : NSObject
 
@@ -86,6 +86,10 @@ typedef void(^GBPushUserNotificationPermissionRequestCompletedBlock)(GBPushUserN
  Call this method to request permissions for showing user notification. If you do not call this method, push notifications will still be delivered when the app is open, however when the app is closed, no user visible alerts/badges/sounds can be shown to the user.
  
  This is only relevant on iOS 8+. On older systems this method has no effect and GBPush simply asks for all permissions (alert + sound + badge) when subscribing to a channel for the first time.
+ 
+ The `permissionsRequested` flag will indicate whether the permissions were actually requested or no. Cases where the flag is NO are when the permissions are already granted, or when the method is not relevant (i.e. when running on iOS 7 or below).
+ 
+ It seems that on iOS 8 you only get one chance to ask for permissions, so you should immediately ask for any permissions you might ever want, on the first request. The alert on iOS 8 also seems to show all the types when asking the user, irrespecitvely of what you've requested here, so the safest seems to just request all. This method simply mirrors the iOS behaviour.
  */
 + (void)requestPermissionForShowingUserNotificationTypes:(GBPushUserNotificationType)types completed:(GBPushUserNotificationPermissionRequestCompletedBlock)block;
 
