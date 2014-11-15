@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name                  = 'GBPush'
-  s.version               = '1.0.0'
+  s.version               = '1.0.1'
   s.summary               = 'Objective-C client library for Goonbee\'s push service, for iOS and OS X.'
   s.homepage              = 'https://github.com/lmirosevic/GBPush'
   s.license               = { type: 'Apache License, Version 2.0', file: 'LICENSE' }
