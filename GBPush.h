@@ -16,15 +16,18 @@
  Add this on the top level of you AppDelegate implementation to implement the required GBPush hooks into the delegate calls.
  */
 #define GBPushAppDelegateHooks \
--(void)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)userInfo { \
+- (void)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)userInfo { \
     BOOL appInactive = application.applicationState == UIApplicationStateInactive || application.applicationState == UIApplicationStateBackground; \
     [GBPush handlePush:userInfo appActive:!appInactive]; \
 } \
--(void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken { \
+- (void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken { \
     [GBPush systemDidEnablePushWithToken:deviceToken]; \
 } \
--(void)application:(UIApplication *)application didFailToRegisterForRemoteNotificationsWithError:(NSError *)error { \
+- (void)application:(UIApplication *)application didFailToRegisterForRemoteNotificationsWithError:(NSError *)error { \
     [GBPush systemFailedToEnablePushWithError:error]; \
+} \
+- (void)application:(UIApplication *)application didRegisterUserNotificationSettings:(UIUserNotificationSettings *)notificationSettings { \
+    [GBPush systemDidFinishRequestingUserNotificationPermissions]; \
 }
 
 /**
