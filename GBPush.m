@@ -16,8 +16,10 @@
 #import <GBToolbox/GBToolbox.h>
 #import <GBStorage/GBStorage.h>
 
-static NSString * const kNamespace =                                    @"wcsg.push";
-static NSString * const kPushManagerToken =                             @"PushToken";
+static NSString * const kGBStorageNamespace =                                       @"com.goonbee.GBPush.GBStorage";
+static NSString * const kPushManagerToken =                                         @"PushToken";
+
+static UIRemoteNotificationType const kLegacyDesiredNotificationTypes =             (UIRemoteNotificationTypeBadge | UIRemoteNotificationTypeSound | UIRemoteNotificationTypeAlert);
 
 typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
 
@@ -33,10 +35,13 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
 
 @interface GBPush ()
 
-@property (strong, nonatomic) NSMutableArray                            *commandQueue;
-@property (copy, nonatomic) GBPushPushHandlerBlock                      pushHandlerBlock;
+@property (strong, nonatomic) NSMutableArray                                        *commandQueue;
+@property (copy, nonatomic) GBPushPushHandlerBlock                                  pushHandlerBlock;
 
-@property (strong, nonatomic) NSMapTable                                *handlersForContext;
+@property (strong, nonatomic) NSMapTable                                            *handlersForContext;
+
+@property (copy, nonatomic) GBPushUserNotificationPermissionRequestCompletedBlock   userNotificationsPermissionRequestBlock;
+@property (assign, nonatomic) BOOL                                                  isRequestForPermissionsForShowingUserNotificationsInProgress;
 
 @end
 
@@ -44,7 +49,7 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
 
 #pragma mark - Life
 
-+(GBPush *)sharedPush {
++ (GBPush *)sharedPush {
     static GBPush *_sharedPush;
     @synchronized(self) {
         if (!_sharedPush) {
@@ -55,34 +60,35 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
     return _sharedPush;
 }
 
--(id)init {
+- (id)init {
     if (self = [super init]) {
         self.commandQueue = [NSMutableArray new];
         self.handlersForContext = [NSMapTable new];
+        self.isRequestForPermissionsForShowingUserNotificationsInProgress = NO;
     }
     
     return self;
 }
 
-#pragma mark - API
+#pragma mark - API (Basics)
 
-+(void)connectToServer:(NSString *)server port:(NSUInteger)port {
++ (void)connectToServer:(NSString *)server port:(NSUInteger)port {
     [[GBPushApi sharedApi] connectToServer:server port:port];
 }
 
-+(void)setChannelSubscriptionStatusForChannel:(NSString *)channel subscriptionStatus:(BOOL)subscriptionStatus completed:(GBPushCallCompletionBlock)block {
++ (void)setChannelSubscriptionStatusForChannel:(NSString *)channel subscriptionStatus:(BOOL)subscriptionStatus completed:(GBPushCallCompletionBlock)block {
     [self setChannelSubscriptionStatusForChannel:channel subscriptionStatus:subscriptionStatus completed:block triggerHandler:YES];
 }
 
-+(void)subscriptionStatusForChannel:(NSString *)channel completed:(GBPushCallCompletionBlock)block {
++ (void)subscriptionStatusForChannel:(NSString *)channel completed:(GBPushCallCompletionBlock)block {
     [self subscriptionStatusForChannel:channel completed:block triggerHandler:YES];
 }
 
-+(void)subscribedChannelsWithRange:(GBSharedRange *)range completed:(GBPushCallCompletionBlock)block {
++ (void)subscribedChannelsWithRange:(GBSharedRange *)range completed:(GBPushCallCompletionBlock)block {
     [self subscribedChannelsWithRange:range completed:block triggerHandler:YES];
 }
 
-+(void)setChannelSubscriptionStatusForChannel:(NSString *)channel subscriptionStatus:(BOOL)subscriptionStatus completed:(GBPushCallCompletionBlock)block triggerHandler:(BOOL)shouldTriggerHandler {
++ (void)setChannelSubscriptionStatusForChannel:(NSString *)channel subscriptionStatus:(BOOL)subscriptionStatus completed:(GBPushCallCompletionBlock)block triggerHandler:(BOOL)shouldTriggerHandler {
     [[self sharedPush] _callCommandWhenPushAvailable:^(NSData *token) {
         if (token) {
             [[GBPushApi sharedApi] setChannelSubscriptionStatusWithPushToken:token channel:channel subscriptionStatus:subscriptionStatus completed:kGBPushManagerThriftAugmentedBlock(block, shouldTriggerHandler)];
@@ -93,7 +99,7 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
     }];
 }
 
-+(void)subscriptionStatusForChannel:(NSString *)channel completed:(GBPushCallCompletionBlock)block triggerHandler:(BOOL)shouldTriggerHandler {
++ (void)subscriptionStatusForChannel:(NSString *)channel completed:(GBPushCallCompletionBlock)block triggerHandler:(BOOL)shouldTriggerHandler {
     [[self sharedPush] _callCommandWhenPushAvailable:^(NSData *token) {
         if (token) {
             [[GBPushApi sharedApi] subscriptionStatusForPushToken:token channel:channel completed:kGBPushManagerThriftAugmentedBlock(block, shouldTriggerHandler)];
@@ -104,7 +110,7 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
     }];
 }
 
-+(void)subscribedChannelsWithRange:(GBSharedRange *)range completed:(GBPushCallCompletionBlock)block triggerHandler:(BOOL)shouldTriggerHandler {
++ (void)subscribedChannelsWithRange:(GBSharedRange *)range completed:(GBPushCallCompletionBlock)block triggerHandler:(BOOL)shouldTriggerHandler {
     [[self sharedPush] _callCommandWhenPushAvailable:^(NSData *token) {
         if (token) {
             [[GBPushApi sharedApi] subscribedChannelsForPushToken:token range:range completed:kGBPushManagerThriftAugmentedBlock(block, shouldTriggerHandler)];
@@ -115,11 +121,61 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
     }];
 }
 
-+(void)setPushHanderBlock:(GBPushPushHandlerBlock)block {
++ (void)setPushHanderBlock:(GBPushPushHandlerBlock)block {
     [[self sharedPush] setPushHandlerBlock:block];
 }
 
-+(void)addPushSubscriptionsPotentiallyChangedHandler:(GBPushSubscriptionsPotentiallyChangedHandlerBlock)block forContext:(id)context {
++ (void)requestPermissionForShowingUserNotificationTypes:(GBPushUserNotificationType)types completed:(GBPushUserNotificationPermissionRequestCompletedBlock)block {
+    // this method has no effect on iOS versions 7 and below. It's only relevant for iOS 8+ where we need to request permissions to notifiy the user.
+    if ([[UIApplication sharedApplication] respondsToSelector:@selector(registerUserNotificationSettings:)]) {
+        // make sure we're not already checking for this
+        if (![self isRequestForPermissionsForShowingUserNotificationsInProgress]) {
+            [self sharedPush].isRequestForPermissionsForShowingUserNotificationsInProgress = YES;
+            
+            // check if the currently permitted user notification types differ from what we want
+            if ([self _areAllRequestedPermissionsAlreadyPermitted:types]) {
+                // store out callback
+                [self sharedPush].userNotificationsPermissionRequestBlock = block;
+                
+                // fire off the request to the system
+                [[UIApplication sharedApplication] registerUserNotificationSettings:[UIUserNotificationSettings settingsForTypes:(UIUserNotificationType)types categories:nil]];
+            }
+            // if they don't differ
+            else {
+                // call the block immediately
+                if (block) block(YES);
+            }
+        }
+        else {
+            NSLog(@"GBPush: requestPermissionForShowingUserNotificationTypes:completed: can only be called once at a time, you must wait for the previous call to finish before calling it again. Doing nothing, your handler will not get called!");
+        }
+    }
+    // iOS 7 or below
+    else {
+        // noop. Permissions are gathered automatically when registering for remote notifications
+    }
+}
+
++ (GBPushUserNotificationType)currentPermittedUserNotificationTypes {
+    // this method has no effect on iOS versions 7 and below. It's only relevant for iOS 8+ where we need to request permissions to notifiy the user.
+    if ([[UIApplication sharedApplication] respondsToSelector:@selector(registerUserNotificationSettings:)]) {
+        // we can just cast it because our bitmask is defined in terms of UIUserNotificationType. The reason for this is that it adds a layer of abstraction between our library and the UIUserNotificationType bitmask which might change or get deprecated in the future, if/when that happens we can no longer cast here and will have to convert.
+        return (GBPushUserNotificationType)[[UIApplication sharedApplication] currentUserNotificationSettings].types;
+    }
+    // iOS 7 and below
+    else {
+        // on older systems we just need to check if we are registered for push, if so we know all the notification types we requested are granted, if we're not registered then nothing was granted.
+        return ([self hasRegisteredForPush] ? (GBPushUserNotificationType)kLegacyDesiredNotificationTypes : GBPushUserNotificationTypeSilent);
+    }
+}
+
+#pragma mark - API (Advanced)
+
++ (BOOL)isRequestForPermissionsForShowingUserNotificationsInProgress {
+    return [GBPush sharedPush].isRequestForPermissionsForShowingUserNotificationsInProgress;
+}
+
++ (void)addPushSubscriptionsPotentiallyChangedHandler:(GBPushSubscriptionsPotentiallyChangedHandlerBlock)block forContext:(id)context {
     if (!context) @throw [NSException exceptionWithName:NSInvalidArgumentException reason:@"Must pass in a non-nil context" userInfo:nil];
     
     // lazy creation of bucket
@@ -132,7 +188,7 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
 
 }
 
-+(void)removeAllPushSubscriptionsChangedHandlersForContext:(id)context {
++ (void)removeAllPushSubscriptionsChangedHandlersForContext:(id)context {
     if (!context) @throw [NSException exceptionWithName:NSInvalidArgumentException reason:@"Must pass in a non-nil context" userInfo:nil];
     
     [[self sharedPush].handlersForContext removeObjectForKey:context];
@@ -140,42 +196,69 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
 
 #pragma mark - AppDelegate hooks
 
-+(void)systemDidEnablePushWithToken:(NSData *)pushToken {
++ (void)systemDidEnablePushWithToken:(NSData *)pushToken {
     // store the token
-    GBStorage(kNamespace)[kPushManagerToken] = pushToken;
-    [GBStorage(kNamespace) save:kPushManagerToken];
+    GBStorage(kGBStorageNamespace)[kPushManagerToken] = pushToken;
+    [GBStorage(kGBStorageNamespace) save:kPushManagerToken];
     
     // process the command queue
     [[self sharedPush] _processCommandQueue];
 }
 
-+(void)systemFailedToEnablePushWithError:(NSError *)error {
++ (void)systemFailedToEnablePushWithError:(NSError *)error {
     // clear the token
-    [GBStorage(kNamespace) removePermanently:kPushManagerToken];
+    [GBStorage(kGBStorageNamespace) removePermanently:kPushManagerToken];
     
     // process the command queue
     [[self sharedPush] _processCommandQueue];
 }
 
-+(void)handlePush:(NSDictionary *)push appActive:(BOOL)appActive {
++ (void)systemDidFinishRequestingUserNotificationPermissions {
+    // we are no longer in the process of requesting
+    [self sharedPush].isRequestForPermissionsForShowingUserNotificationsInProgress = NO;
+    
+    // call our block, it will get the outcome by querying +[UIApplication sharedApplication] because that is the source of truth.
+    [self _callUserNotificationsPermissionRequestBlock];
+}
+
++ (void)handlePush:(NSDictionary *)push appActive:(BOOL)appActive {
     // call the stored handler
     if ([[self sharedPush] pushHandlerBlock]) [[self sharedPush] pushHandlerBlock](push, appActive);
 }
 
 #pragma mark - Plumbing
 
-+(NSData *)pushToken {
++ (NSData *)pushToken {
     // get the push token as stored
-    return GBStorage(kNamespace)[kPushManagerToken];
+    return GBStorage(kGBStorageNamespace)[kPushManagerToken];
 }
 
-+(BOOL)isPushEnabledBySystem {
++ (BOOL)hasRegisteredForPush {
+    return ([self pushToken] != nil);
+}
+
++ (BOOL)isPushEnabledBySystem {
     return !IsPushDisabled();
 }
 
-#pragma mark - Util
+#pragma mark - Private
 
-+(void)_callAllSubscriptionsPotentiallyChangedHandlerBlocks {
++ (void)_callUserNotificationsPermissionRequestBlock {
+    // get singleton
+    GBPush *sharedPush = [self sharedPush];
+    
+    // call our block if we had one
+    if (sharedPush.userNotificationsPermissionRequestBlock) sharedPush.userNotificationsPermissionRequestBlock([self currentPermittedUserNotificationTypes]);
+    
+    // release the block
+    sharedPush.userNotificationsPermissionRequestBlock = nil;
+}
+
++ (BOOL)_areAllRequestedPermissionsAlreadyPermitted:(GBPushUserNotificationType)requestPermissions {
+    return IsBitmaskASubsetOfBitmaskB(requestPermissions, [self currentPermittedUserNotificationTypes]);
+}
+
++ (void)_callAllSubscriptionsPotentiallyChangedHandlerBlocks {
     for (id context in [self sharedPush].handlersForContext) {
         for (GBPushSubscriptionsPotentiallyChangedHandlerBlock updateHandler in [self sharedPush].handlersForContext[context]) {
             updateHandler();
@@ -183,10 +266,17 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
     }
 }
 
-+(void)_requestPushPermissionsIfNeeded {
++ (void)_requestPushPermissionsIfNeeded {
     // if we don't have a push token yet, try to get one
     if (![self pushToken]) {
-        [[UIApplication sharedApplication] registerForRemoteNotificationTypes:(UIRemoteNotificationTypeBadge | UIRemoteNotificationTypeSound | UIRemoteNotificationTypeAlert)];
+        //iOS 8+
+        if ([[UIApplication sharedApplication] respondsToSelector:@selector(registerForRemoteNotifications)]) {
+            [[UIApplication sharedApplication] registerForRemoteNotifications];
+        }
+        //iOS 7 and below
+        else {
+            [[UIApplication sharedApplication] registerForRemoteNotificationTypes:kLegacyDesiredNotificationTypes];
+        }
     }
     // we have a token already
     else {
@@ -194,7 +284,7 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
     }
 }
 
--(void)_callCommandWhenPushAvailable:(GBPushInternalTokenAbstractionBlock)command {
+- (void)_callCommandWhenPushAvailable:(GBPushInternalTokenAbstractionBlock)command {
     if ([self.class pushToken]) {
         // call command immediately
         command([self.class pushToken]);
@@ -208,11 +298,11 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
     }
 }
 
--(void)_enqueueCommandAsBlock:(GBPushInternalTokenAbstractionBlock)block {
+- (void)_enqueueCommandAsBlock:(GBPushInternalTokenAbstractionBlock)block {
     [self.commandQueue addObject:[block copy]];
 }
 
--(void)_processCommandQueue {
+- (void)_processCommandQueue {
     NSData *token = [self.class pushToken];// could be nil, that's ok
     
     for (GBPushInternalTokenAbstractionBlock command in self.commandQueue) {
