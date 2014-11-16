@@ -230,9 +230,9 @@ typedef void(^GBPushInternalTokenAbstractionBlock)(NSData *token);
     [self _callUserNotificationsPermissionRequestBlock];
 }
 
-+ (void)handlePush:(NSDictionary *)push appActive:(BOOL)appActive {
++ (void)handlePush:(NSDictionary *)push appActive:(BOOL)appActive completionHandler:(GBSystemPushCompletionHandlerBlock)completionHandler {
     // call the stored handler
-    if ([[self sharedPush] pushHandlerBlock]) [[self sharedPush] pushHandlerBlock](push, appActive);
+    if ([[self sharedPush] pushHandlerBlock]) [[self sharedPush] pushHandlerBlock](push, appActive, completionHandler);
 }
 
 #pragma mark - Plumbing

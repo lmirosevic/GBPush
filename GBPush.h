@@ -19,12 +19,12 @@
 /* Push handling (Support for iOS 6 and below) */ \
 - (void)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)userInfo { \
     BOOL appInactive = application.applicationState == UIApplicationStateInactive || application.applicationState == UIApplicationStateBackground; \
-    [GBPush handlePush:userInfo appActive:!appInactive]; \
+    [GBPush handlePush:userInfo appActive:!appInactive completionHandler:nil]; \
 } \
 /* Push handling (iOS 7+ support) */ \
 - (void)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)userInfo fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler { \
     BOOL appInactive = application.applicationState == UIApplicationStateInactive || application.applicationState == UIApplicationStateBackground; \
-    [GBPush handlePush:userInfo appActive:!appInactive]; \
+    [GBPush handlePush:userInfo appActive:!appInactive completionHandler:completionHandler]; \
 } \
 /* Token registration (success) */ \
 - (void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken { \
@@ -44,7 +44,7 @@
  */
 #define GBPushAppDidFinishLaunchingWithPushNotificationHook \
 NSDictionary *notification = [launchOptions objectForKey:UIApplicationLaunchOptionsRemoteNotificationKey]; \
-if (notification) [GBPush handlePush:notification appActive:NO];
+if (notification) [GBPush handlePush:notification appActive:NO completionHandler:nil];
 
 #pragma mark - Types
 
@@ -55,9 +55,11 @@ typedef NS_OPTIONS(NSUInteger, GBPushUserNotificationType) {
     GBPushUserNotificationTypeAlert =       UIUserNotificationTypeAlert,
 };
 
+typedef void(^GBSystemPushCompletionHandlerBlock)(UIBackgroundFetchResult result);
+
 typedef void(^GBPushCallCompletionBlock)(id result, BOOL success);
 typedef void(^GBPushSubscriptionsPotentiallyChangedHandlerBlock)();
-typedef void(^GBPushPushHandlerBlock)(NSDictionary *pushNotification, BOOL appActive);
+typedef void(^GBPushPushHandlerBlock)(NSDictionary *pushNotification, BOOL appActive, GBSystemPushCompletionHandlerBlock completionHandler);
 typedef void(^GBPushUserNotificationPermissionRequestCompletedBlock)(GBPushUserNotificationType permittedTypes, BOOL didRequestPermissions);
 
 @interface GBPush : NSObject
@@ -164,7 +166,7 @@ typedef void(^GBPushUserNotificationPermissionRequestCompletedBlock)(GBPushUserN
  
  In application:didFinishLaunchingWithOptions: you should call it if the launchOptions dictionary contains the UIApplicationLaunchOptionsRemoteNotificationKey key, passing in the value for that key, and setting appActive to NO.
  */
-+ (void)handlePush:(NSDictionary *)push appActive:(BOOL)appActive;
++ (void)handlePush:(NSDictionary *)push appActive:(BOOL)appActive completionHandler:(GBSystemPushCompletionHandlerBlock)completionHandler;
 
 #pragma mark - Plumbing
 
