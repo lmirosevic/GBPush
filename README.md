@@ -1,6 +1,6 @@
 # GBPush ![Version](https://img.shields.io/cocoapods/v/GBPush.svg?style=flat)&nbsp;![License](https://img.shields.io/badge/license-Apache_2-green.svg?style=flat)
 
-Objective-C client library for Goonbee's push service, for iOS and OS X.
+Objective-C client library for Goonbee's push service, for iOS.
 
 Copyright & License
 ------------
