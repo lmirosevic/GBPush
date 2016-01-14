@@ -8,7 +8,7 @@ Usage
 First import the library:
 
 ```objective-c
-import <GBPush/GBPush.h>
+#import <GBPush/GBPush.h>
 ```
 
 Connect to the GBPush service. This also initialises the GBPush library and connects it to the iOS APNS machinery:
@@ -20,20 +20,14 @@ Connect to the GBPush service. This also initialises the GBPush library and conn
 Then subscribe to channels that you're interested in (if you have more than one channel, you'd call this method several times, once for each channel):
 
 ```objective-c
-[GBPush setChannelSubscriptionStatusForChannel:@"user.lmirosevic" subscriptionStatus:YES completed:^(BOOL success) {
-    if (success) {
-        NSLog(@"Successfully subscribed to the channel.");
-    } else {
-        NSLog(@"Failed to subscribe to channel.");
-    }
-}];
+[GBPush setChannelSubscriptionStatusForChannel:@"user.lmirosevic" subscriptionStatus:YES completed:nil];
 ```
 
-Implement the handler to be executed when a push notification is received. (If `appActive` is `NO`, it means your application was not active when the push was received and the user tapped on the notification which in turn opened your app):
+Implement the handler to be executed when a push notification is received. (If `appActive` is `NO`, it means your application was not active when the push was received, and it was opened in response to the user tapping on the notification):
 
 ```objective-c
 [GBPush onPush:^(NSDictionary *pushNotification, BOOL appActive) {
-    // Get the APNS properties out of the push
+    // Get the APNS properties out of the push message
     NSString *alert = pushNotification[@"aps"][@"alert"];
     NSString *badge = pushNotification[@"aps"][@"badge"];
     
@@ -45,7 +39,7 @@ Implement the handler to be executed when a push notification is received. (If `
 }];
 ```
 
-Before you can receive push notifications, you will have to ask the user's permission to allow push notifications for your app. GBPush allows you to control when this happens. At the opportune time of your choosing, you can request this while specifying what kinds of messages you're interested in (alert, badge, sound, background/silent):
+Before you can receive push notifications, you will have to ask the user's permission to allow push notifications for your app. GBPush allows you to control when this happens. At the opportune time of your choosing, you can request this while specifying what kinds of messages you're interested in (alert, badge, sound and/or background/silent):
 
 ```objective-c
 [GBPush requestPermissionForShowingUserNotificationTypes:(GBPushUserNotificationTypeAlert | GBPushUserNotificationTypeBadge | GBPushUserNotificationTypeSound | GBPushUserNotificationTypeSilent) completed:^(GBPushUserNotificationType permittedTypes, BOOL didRequestPermissions) {
@@ -59,11 +53,11 @@ Before you can receive push notifications, you will have to ask the user's permi
         NSLog(@"We can send background push messages");
     }
 
-    // If the user was not asked to allow push notification...
+    // It can happen that the user was not even asked to allow push notifications...
     if (!didRequestPermissions) {
         // ...perhaps they were asked before and rejected it for our app, and you only get to ask once.
         
-        // What we can do now is show an alert to the user, and/or urge them to go to the Settings app and enable push for our app there.
+        // What we can do now is show an alert to the user, or urge them to go to the Settings app and enable push for our app there.
         // ...
     }
 }];
@@ -82,16 +76,7 @@ Checking whether or not we're currently subscribed to a particular channel:
 
 ```objective-c
 [GBPush subscriptionStatusForChannel:@"user.lmirosevic" completed:^(BOOL subscribed, BOOL success) {
-    if (!success) {
-        NSLog(@"The call failed, try it again later");
-        return;
-    }
-    
-    if (subscribed) {
-        NSLog(@"We are subscribed.");
-    } else {
-        NSLog(@"Not subscribed (yet).");
-    }
+	NSLog(@"We're subscribed: %@", subscribed ? @"YES" : @"NO");
 }];
 ```
 
@@ -99,11 +84,6 @@ Getting a list of channels we're currently subscribed to. In this example we're 
 
 ```objective-c
 [GBPush subscribedChannelsWithRange:[[GBSharedRange alloc] initWithDirection:Direction_BACKWARDS index:0 length:5] completed:^(NSArray channels, BOOL success) {
-    if (!success) {
-        NSLog(@"The call failed, try it again later");
-        return;
-    }
-    
     NSLog(@"These are the 5 msot recent channels we're currently subscribed on: %@", channels);
 }];
 ```
